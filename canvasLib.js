@@ -1,12 +1,28 @@
 /*
  * 			CanvasLib
  * 
- *   Javascript html5 Canvas Helper object
+ *   Javascript html5 Canvas Helper functions
+ *      and add-on to the context2d
  * 
- *   insertCanvas on the web page, create canvas, 
- *    add width and height property to the context2d, create a canvas 
- *      from an image, draw a round rect.
- *      requestAnimationFrame polyfill
+ *   Features : 
+ * 
+ *   Helpers :
+ *     insertCanvas on the web page.
+ *     create canvas.
+ *     insert canvas on top/below another one.
+ *     create a canvas from an image.
+ *     requestAnimationFrame polyfill
+ * 
+ *   Context2d :
+ *     build the shadow of a canvas
+ *     build a copy of a canvas
+ *     adds width and height property to the context2d.
+ *     rounded rectangle
+ *     circle
+ *     ellipse
+ *     blur
+ *     varLine line of variable width
+ *     varLineRounded rounded line of variable width
  * 
  *   Author : Vincent Piel
  * 
@@ -27,7 +43,12 @@
 // Game Alchemist Workspace.
 window.ga = window.ga || {};
 
-ga.CanvasLib = { canvasCount : 0 };
+ga.CanvasLib = { };
+
+//  ------------------------------------
+//        Helper functions
+//  ------------------------------------
+
 
 // insert a canvas on top of the current document.
 // If width, height are not provided, use all document width / height
@@ -49,7 +70,6 @@ ga.CanvasLib.insertMainCanvas = function insertMainCanvas (_w,_h) {
 ga.CanvasLib.createCanvas  = function createCanvas ( w, h ) {
     var newCanvas = document.createElement('canvas');
 	newCanvas.width  = w;     newCanvas.height = h;
-  //  newCanvas.style.position = 'absolute' ;
 	return newCanvas;
 }
 
@@ -85,20 +105,11 @@ ga.CanvasLib.canvasFromImage = function canvasFromImage (sourceImage, _scale, _s
 	return newCanvas;
 };
 
-// draw a rounded rectangle.
-// use stroke()  or fill()    afterwise.
-AddHiddenProp(CanvasRenderingContext2D.prototype, "roundRect" , function (x, y, w, h, r) {
-            if (w < 2 * r) r = w / 2;
-            if (h < 2 * r) r = h / 2;
-            this.beginPath();
-            this.moveTo(x+r, y);
-            this.arcTo(x+w, y,   x+w, y+h, r);
-            this.arcTo(x+w, y+h, x,   y+h, r);
-            this.arcTo(x,   y+h, x,   y,   r);
-            this.arcTo(x,   y,   x+w, y,   r);
-            this.closePath();
-            return this; } );
-      
+
+//  ------------------------------------
+//        Add-on to Context2d
+//  ------------------------------------
+
 // width property for the context2d.  Does cache the this.canvas.width into a hidden property            
 Object.defineProperty(CanvasRenderingContext2D.prototype, "width" ,
                       { get : function () { 
@@ -111,9 +122,27 @@ Object.defineProperty(CanvasRenderingContext2D.prototype, "height" ,
                       { get : function () { if (this._height) return this._height;
   	                                       Object.defineProperty(this, '_height', { value : this.canvas.height}) ;
   	                                       return this._height ;        }} );
-  
-
-AddHiddenProp( CanvasRenderingContext2D.prototype, "blur", function ( radius, intensity) { 
+ 
+// draw a rounded rectangle.
+// use stroke()  or fill()    afterwise.
+CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2;
+            if (h < 2 * r) r = h / 2;
+            this.beginPath();
+            this.moveTo(x+r, y);
+            this.arcTo(x+w, y,   x+w, y+h, r);
+            this.arcTo(x+w, y+h, x,   y+h, r);
+            this.arcTo(x,   y+h, x,   y,   r);
+            this.arcTo(x,   y,   x+w, y,   r);
+            this.closePath();
+            return this; } ;
+      
+ 
+// blur : will blur the current canvas with given
+// radius and intensity.
+// let radius be in [2,14], and intensity below 0.1
+// still experimental 
+CanvasRenderingContext2D.prototype.blur = function ( radius, intensity) { 
   if (radius ===0) return;
   if(!(radius & 1)) radius++;
   this.save();  
@@ -133,15 +162,14 @@ AddHiddenProp( CanvasRenderingContext2D.prototype, "blur", function ( radius, in
       this.drawImage(cv2, i-raddiv2, j-raddiv2);
     }
     this.restore();
-} );
+};
 
-function attenuate(x,y,cx,cy,rad) {
-      var distance = Math.sqrt(sq(x-cx)+sq(y-cy));
-      if (!distance || distance>rad) return 0;
-      return (1-distance/rad);  
-}
 
-AddHiddenProp( CanvasRenderingContext2D.prototype, 'buildShadow', function(color) {
+// buildShadow
+// returns a new canvas that has all non-empty pixels
+// sets to the provided color.
+//  use it to build a shadow or a highlight for a character
+CanvasRenderingContext2D.prototype.buildShadow = function(color) {
   var cv2 = ga.CanvasLib.createCanvas(this.width, this.height) ;
   var ctx2= cv2.getContext('2d');
   ctx2.save();
@@ -151,14 +179,140 @@ AddHiddenProp( CanvasRenderingContext2D.prototype, 'buildShadow', function(color
   ctx2.drawImage(this.canvas,0,0);
   ctx2.restore();
   return cv2;
-} );
+};
 
-AddHiddenProp( CanvasRenderingContext2D.prototype, 'buildCopy', function(scale) {
+// buildCopy
+// returns a new canvas which contains a copy of the current canvas.
+CanvasRenderingContext2D.prototype.buildCopy = function(scale) {
 	var canvasCopy = ga.CanvasLib.createCanvas(this.width, this.height) ;
 	var ctxCopy = canvasCopy.getContext('2d');
 	ctxCopy.drawImage(this.canvas, 0, 0 );
 	return canvasCopy;
-} );
+};
+
+// circle
+// draw a circle centerd in (x,y) and of radius r.
+// you might then use stroke or fill to get it drawn
+// OR use the optionnal parameters fillColor, width, strokeColor
+// which will trigger fill and/or stroke.
+CanvasRenderingContext2D.prototype.circle =  function circle( x, y, r, fillColor, strokeColor, width ) {
+		this.beginPath();
+		this.arc(x, y, r, 0 , 2*Math.PI );
+		this.closePath();
+		if (fillColor) {
+			 this.fillStyle   = fillColor ; 
+			 this.fill()  ;
+		}
+        if (strokeColor) {
+            if (width)    this.lineWidth   = width    ;
+        	this.strokeStyle = strokeColor ;
+        	this.stroke() ;
+        }
+ }
+
+
+
+// ellipse
+// draw a ellipse centerd in (x,y) and of horizontal radius r1, vertical r2.
+// you might then use stroke or fill to get it drawn
+// OR use the optionnal parameters fillColor, width, strokeColor
+// which will trigger fill and/or stroke.
+CanvasRenderingContext2D.prototype.ellipse = function ( x, y, r1, r2, fillColor, strokeColor, width ) {
+	  this.beginPath();
+  	  r1 /= 2 ;
+  	  r2 /= 2 ;
+ 	  this.moveTo(x, y - r2);
+  
+	  this.bezierCurveTo( x + r1, y - r2 ,
+	  					  x + r1, y + r2, 
+                		  x		, y + r2 ); 
+
+	  this.bezierCurveTo( x - r1, y + r2, 
+				    	  x - r1, y - r2, 
+				    	  x		, y - r2); 
+	  this.closePath();	
+ 
+		if (fillColor) {
+			 this.fillStyle   = fillColor ; 
+			 this.fill()  ;
+		}
+        if (strokeColor) {
+            if (width)    this.lineWidth   = width    ;
+        	this.strokeStyle = strokeColor ;
+        	this.stroke() ;
+        }
+ }
+
+// varLine : draws a line from A(x1,y1) to B(x2,y2)
+// that starts with a w1 width and ends with a w2 width.
+// you might then use stroke or fill to get it drawn
+// OR use the optionnal parameters fillColor, width, strokeColor
+// which will trigger fill and/or stroke.
+CanvasRenderingContext2D.prototype.varLine = function(x1, y1, x2, y2, w1, w2, fillColor, strokeColor, width ) {
+    var dx = (x2 - x1);
+    var dy = (y2 - y1);
+    w1 /= 2;      w2 /= 2; // we only use w1/2 and w2/2 for computations.
+    // length of the AB vector
+    var length = Math.sqrt(sq(dx) + sq(dy));
+    if (!length) return; // exit if zero length
+    dx /= length ;    dy /= length ;
+    var shiftx = - dy * w1 ;  // compute AA1 vector's x
+    var shifty =   dx * w1 ;  // compute AA1 vector's y
+    this.beginPath();
+    this.moveTo(x1 + shiftx, y1 + shifty);
+    this.lineTo(x1 - shiftx, y1 - shifty); // draw A1A2
+    shiftx =  - dy * w2 ;   // compute BB1 vector's x
+    shifty =    dx * w2 ;   // compute BB1 vector's y
+    this.lineTo(x2 - shiftx, y2 - shifty); // draw A2B1
+    this.lineTo(x2 + shiftx, y2 + shifty); // draw B1B2
+    this.closePath(); // draw B2A1
+	if (fillColor) {
+		 this.fillStyle   = fillColor ; 
+		 this.fill()  ;
+	}
+    if (strokeColor) {
+        if (width)    this.lineWidth   = width    ;
+    	this.strokeStyle = strokeColor ;
+    	this.stroke() ;
+    }  
+}
+
+// varLineRounded : draws a line from A(x1,y1) to B(x2,y2)
+// that starts with a w1 width and ends with a w2 width,
+//  and has rounded edges.
+// you might then use stroke or fill to get it drawn
+// OR use the optionnal parameters fillColor, width, strokeColor
+// which will trigger fill and/or stroke.
+CanvasRenderingContext2D.prototype.varLineRounded = function ( x1, y1, x2, y2, w1, w2, fillColor, strokeColor, width ) {
+    var dx = (x2 - x1) ;
+    var dy = (y2 - y1) ;
+    w1 /= 2;  w2 /= 2; // we only use w1/2 and w2/2 for computations.
+    // length of the AB vector
+    var length = Math.sqrt(sq(dx) + sq(dy));
+    if (!length) return; // exit if zero length
+    dx /= length ;    dy /= length ;
+    var shiftx = - dy * w1 ;  // compute AA1 vector's x
+    var shifty =   dx * w1 ;  // compute AA1 vector's y
+    var angle = Math.atan2(shifty, shiftx);
+    this.beginPath();
+    this.moveTo(x1 + shiftx, y1 + shifty);
+    this.arc(x1,y1, w1, angle, angle+Math.PI); // draw A1A2
+    shiftx =  - dy * w2 ;  // compute BB1 vector's x
+    shifty =    dx * w2 ;  // compute BB1 vector's y
+    this.lineTo(x2 - shiftx, y2 - shifty); // draw A2B1
+    this.arc(x2,y2, w2, angle+Math.PI, angle); // draw A1A2    
+    this.closePath(); // draw B2A1
+	if (fillColor) {
+		 this.fillStyle   = fillColor ; 
+		 this.fill()  ;
+	}
+    if (strokeColor) {
+        if (width)    this.lineWidth   = width    ;
+    	this.strokeStyle = strokeColor ;
+    	this.stroke() ;
+    }   
+}
+
 
 // requestAnimationFrame polyfill
 var  w=window,    foundRequestAnimationFrame  =    w.requestAnimationFrame ||
@@ -168,37 +322,15 @@ var  w=window,    foundRequestAnimationFrame  =    w.requestAnimationFrame ||
 window.requestAnimationFrame  = foundRequestAnimationFrame ;
 
    
+// helper functions 
+
 function AddHiddenProp (obj, name, value) { Object.defineProperty(obj, name, {value : value }) }
    
 function sq(x) { return x*x; }
 
-
-
-function circle( x, y, r, fcol, w, scol ) {
-		this.beginPath();
-		// ctx.moveTo(x+r, y);
-		this.arc(x, y, r, 0 , 6.28 );
-		if (fcol) this.fillStyle   = fcol ; 
-        if (scol) this.strokeStyle = scol ;
-        if (w)    this.lineWidth   = w    ;
-        if (fcol) this.fill()   ;
-        if (scol) this.stroke() ;
- }
-
-AddHiddenProp( CanvasRenderingContext2D.prototype, 'circle', circle );
-
-
-function ellipse(ctx, x, y, r1, r2, w, fcol, scol) {
-        ctx.save();
-        ctx.scale(1, r2/r1);
-		ctx.beginPath();
-		if (fcol) ctx.fillStyle=fcol; 
-        if (scol) ctx.strokeStyle= scol;
-        if (w)   ctx.lineWidth = w;
-		ctx.arc(x, y, r1, 0 , 6.28 );
-        if (fcol) ctx.fill();
-        if (scol) ctx.stroke();
-		ctx.restore(); 	
- }
-
+function attenuate(x,y,cx,cy,rad) {
+      var distance = Math.sqrt(sq(x-cx)+sq(y-cy));
+      if (!distance || distance>rad) return 0;
+      return (1-distance/rad);  
+}
 }());
